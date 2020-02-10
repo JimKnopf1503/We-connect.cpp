@@ -36,7 +36,7 @@ You get back a CURL_Response. CURL_Response.errCode returns the error code from 
 #include <string.h>
 #include <iostream>
 #include <algorithm>
-#include <locale>         // std::locale, std::tolower
+#include <locale>        
 #include <sstream>
 #include <unistd.h>
 #include <sstream>
@@ -57,77 +57,58 @@ static struct curl_slist *slist_get_last(struct curl_slist *list);
 
 WEB::WEB()
 {
-    //ctor
-#ifndef __CarNetTest___
-    m_stopCarNet=false;
-    response.PollIntervall=300;
-#endif // __CarNetTest___
-//    curl_global_init(CURL_GLOBAL_ALL);
+    m_stopCarNet=false;//no thread yet
+    response.PollIntervall=300;// if thread is used
+    curl_global_init(CURL_GLOBAL_ALL);
 }
 
 WEB::~WEB()
 {
-#ifndef __CarNetTest___
     m_stopCarNet=true;
     StopThread();
-#endif // __CarNetTest___
 }
 void WEB::StartThread()
 {
-#ifndef __CarNetTest___
-#ifdef __debug__
-//wxMessageBox(wxT("Starte Tread"));
-
-#endif // __debug__
-    extern  CURL_Response car;
+    extern  CURL_Response car;//get access to the struct in the main app
     myMutex.lock();
-    if(!car.thread_runing)
+    if(!car.thread_runing)// only run once
     {
-        m_stopCarNet = false;
-        car.thread_runing=true;
-        if (car.thread_runing) m_thread = std::thread(&WEB::theThread, this);
+        m_stopCarNet = false;//m_stopCarNet is checked in the thread loop
+        car.thread_runing=true;// indicate that the thread is running
+        m_thread = std::thread(&WEB::theThread, this);
         cout<<"Thread gestartet\n";
     }
     myMutex.unlock();
-#endif // __CarNetTest___
 }
 void WEB::StopThread()
 {
-    extern  CURL_Response car;
+    extern  CURL_Response car;//get access to the struct in the main app
     if(car.thread_runing)
     {
-        m_stopCarNet=true;
+        m_stopCarNet=true;// tell the thread loop to exit
         if (m_thread.joinable()) m_thread.join();
         cout<<"Thread gestoppt\n";
-        car.thread_runing=false;
+        car.thread_runing=false;// indicate that the thread ist not running
     }
 }
 void WEB::theThread()
 {
-//    cout<<"Thread gestartet\n";
-    time_t lastPoll=0;
-    extern CURL_Response car;
-    car.thread_runing=true;
-    WEB CarNet;
-    while(!m_stopCarNet)
+    time_t lastPoll=0;// do the first poll directly
+    extern CURL_Response car;//get access to the struct in the main app
+    WEB CarNet;// create ojbect
+    while(!m_stopCarNet)//m_stopCarNet is atomic and accessed StartThread and StopThread
     {
-        response.thread_runing=car.thread_runing;
-        CarNet.response=car;
-        myMutex.lock();
-        if ((long)lastPoll+(long)car.PollIntervall<=time (NULL))
+        myMutex.lock();//exclusive acces to the variables
+        if ((long)lastPoll+(long)car.PollIntervall<=time (NULL))// only if the PollIntervall seconds have passed
         {
-            lastPoll=time (NULL);
-            if(!car.request_in_progress)  car=CarNet.CARNET();
+            lastPoll=time (NULL);// now
+            if(!car.request_in_progress)  car=CarNet.CARNET();//do the requst if not already one is running, by be called directly. 
         }
-        car.thread_runing=true;
-
         myMutex.unlock();
-
         std::this_thread::sleep_for (std::chrono::seconds(1));
     }
-//    cout<<"Thread beendet\n";
 }
-struct data
+struct data//from curl debug
 {
     char trace_ascii; /* 1 or 0 */
 };
@@ -135,7 +116,7 @@ struct data
 static
 void dump(const char *text,
           FILE *stream, unsigned char *ptr, size_t size,
-          char nohex)
+          char nohex)// also curl debug
 {
     size_t i;
     size_t c;
@@ -228,46 +209,45 @@ int my_trace(CURL *handle, curl_infotype type,
     dump(text, stderr, (unsigned char *)data, size, config->trace_ascii);
     return 0;
 }
-CURL_Response WEB::CARNET()
+CURL_Response WEB::CARNET()//request all data
 {
-    extern CURL_Response car;
-    response=car;
-    if(!car.request_in_progress)
+    extern CURL_Response car;// get access of car in main app to get the userdata
+    response=car;//store all data in the locale struct
+    if(!car.request_in_progress)// is already a request running?
     {
-        car.request_in_progress=true;
-        int MaxVersuche;
-        setenv("SSLKEYLOGFILE","/home/pi/sslkeylogfile.keylog",1);
-        CURL *curl;
+        car.request_in_progress=true;// now one request IS running
+        setenv("SSLKEYLOGFILE","/home/pi/sslkeylogfile.keylog",1);//for wireshark if needed and working (only on pi4 for me)
+        CURL *curl;// standard curl things
         CURLcode res;
         curl = curl_easy_init();
-        response.Car.successlevel = 0;
+        response.Car.successlevel = 0;// now we begin
         if(curl)
         {
             curl = curl_easy_init();
-            struct data config;
+            struct data config;//curl debug
             config.trace_ascii = 1; /* enable ascii tracing */
             char buffer[CURL_ERROR_SIZE+1] = {};
             res=curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, buffer);
-            curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);
-            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, CurlWrite_CallbackFunc_StdString);
-            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
+            curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);//set to 1L if you want to see what curl is doing
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, CurlWrite_CallbackFunc_StdString);//this function will store the response data
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);// s will hild the data
             curl_easy_setopt(curl, CURLOPT_COOKIEFILE, "coockie.txt");
             curl_easy_setopt(curl, CURLOPT_COOKIEJAR, "coockie.txt");
             curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
-            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER,1L);
-            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST,2);
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER,1L);// set to 0 if you have problems with certificates
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST,2);// here the same
             curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
             curl_easy_setopt(curl, CURLOPT_HEADERDATA, &response_header);
-            response =do_login(curl,response);
-            if(response.Car.successlevel<8) return response;
-            do_request(curl);
-            do_logout(curl);
-            curl_version_info_data *d = curl_version_info(CURLVERSION_NOW);
+            response =do_login(curl,response);// do the login run
+            if(response.Car.successlevel<8) return response;// we made all 8 stages? go on
+            do_request(curl);//request all the data
+            do_logout(curl);// and logout
+            curl_version_info_data *d = curl_version_info(CURLVERSION_NOW);// if you want to know what version you are running
 //        cout<<"libcurl Version: "<<d->version<<"\n";
-            if (        response.Car.successlevel>8)
+            if (response.Car.successlevel>8) //do_request hopefully stored some data
             {
-                response=init_response(response);
-                unpack_emanager(eManagerResult);
+                response=init_response(response);//first set all varialbes to a state, we can see thats not the true data
+                unpack_emanager(eManagerResult);// unpack all the data
                 unpack_fullyLoadedVehicles(FullyLoadedCarsResponse);
                 unpack_vehicleDetails(VehicleDetailsResponse);
                 unpack_position(lastLocationResult);
@@ -283,12 +263,12 @@ CURL_Response WEB::CARNET()
 /////////// ENDE +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
         }
-        else cout<<"CURL fehler\n";
+        else cout<<"CURL fehler\n";// we did not got a curl handle
         car.request_in_progress=false;
     }
     return response;
 }
-CURL_Response WEB::CARNET(std::string command)
+CURL_Response WEB::CARNET(std::string command)// mostly like the one above but no requests are done, instead a command is send
 {
  extern CURL_Response car;
     response=car;
@@ -320,7 +300,7 @@ CURL_Response WEB::CARNET(std::string command)
             curl_easy_setopt(curl, CURLOPT_HEADERDATA, &response_header);
             response =do_login(curl,response);
             if(response.Car.successlevel<8) return response;
-            {
+            {// insted of the request is here a command selected
                if(command=="start clima") do_command(curl,(base_json_urlVIN+"/-/emanager/trigger-climatisation"),"{\"triggerAction\":true,\"electricClima\":true}");
                if(command=="stop clima") do_command(curl,(base_json_urlVIN+"/-/emanager/trigger-climatisation"),"{\"triggerAction\":false,\"electricClima\":true}");
                 if(command=="start windowmelt") do_command(curl,(base_json_urlVIN+"/-/emanager/trigger-windowheating"),"{\"triggerAction\":true}");
@@ -337,10 +317,8 @@ CURL_Response WEB::CARNET(std::string command)
         car.request_in_progress=false;
     }
     return response;
-               //if(command=="start clima") do_command(curl,"triggerAction=True&electricClima=True");
-               //if(command=="stop clima") do_command(curl,"triggerAction=False&electricClima=True");
 }
-std::string WEB::tolowerString(std::string Input)
+std::string WEB::tolowerString(std::string Input)//return the given string in lowercase. Used in unpack routines
 {
     std::string Output=Input;
     std::locale loc;
@@ -369,7 +347,7 @@ std::string WEB::removeNewLineCaracter (std::string Input)
     }
     return Input;
 }
-std::string WEB::trim(std::string Input)
+std::string WEB::trim(std::string Input)// cut away leading and trailing spaces
 {
     char check ;
     check = Input.at(0);
@@ -386,7 +364,7 @@ std::string WEB::trim(std::string Input)
     }
     return Input;
 }
-std::string WEB::getValue(std::string Message, std::string keyword1, int Field)
+std::string WEB::getValue(std::string Message, std::string keyword1, int Field)// not used anymore, comes from carnet time
 {
     //äußere Klammer entfernen
     int spos;
@@ -647,7 +625,7 @@ std::string WEB::getValue(std::string Message, std::string keyword1, int Field)
 }
 std::string WEB::getValue(std::string Message, std::string keyword1)
 {
-//#define __cout__
+//#define __cout__  //if something dont work, uncomment this line
 #ifdef __cout__
     cout<<"Get start -------------------------------\n";
 #endif // __cout__
@@ -663,13 +641,13 @@ std::string WEB::getValue(std::string Message, std::string keyword1)
     cout<<"Key:\n"<<keyword1<<"\n";
     cout<<"Message:\n"<<Message<<"\n";
 #endif // __cout__
-    while(key.compare(keyword1) != 0)//loof find right keyword
+    while(key.compare(keyword1) != 0)//loop find right keyword
     {
         key = ""; //reset seperated keyword
         value = "";// reset seperated value
-        cuts = 0;//Cut Startnothing to cut jet
+        cuts = 0;//Cut Start nothing to cut jet
         gefunden = false; // found right keyword or end of message reached
-        spos = Message.find("\"");//search beginning of keyword in message
+        spos = Message.find("\"");//search beginning of a keyword in message
         if(spos < 0)//no keywords at all
             break;
         cuts = spos;//all before is not nedded
@@ -704,7 +682,7 @@ unpackBrackets:
 #ifdef __cout__
             cout<<"rest Value after {}:\n"<<Message.substr(spos,epos-spos)<<"\n"<<endl;
 #endif // __cout__
-            goto unpackBrackets;
+            goto unpackBrackets;//container in container?
         }
 
         check = Message.at(spos);
@@ -724,9 +702,9 @@ unpackBrackets:
 #ifdef __cout__
             cout<<"rest Value after []:\n"<<Message.substr(spos,cute-spos)<<"\n"<<endl;
 #endif // __cout__
-            goto unpackBrackets;
+            goto unpackBrackets;//container in container?
         }//found new [] container
-        if (!gefunden) //only when no container
+        if (!gefunden) //only when no container, otherwise we will return the container
         {
             epos=Message.find(",",spos);
             if (epos>=0)
@@ -749,20 +727,20 @@ unpackBrackets:
                     }
 
                 }
-                else epos=value.size()-1;
+                else epos=value.size()-1;// may be its a number or bool
             }
 
         }
-        value=Message.substr(spos,epos-spos);
+        value=Message.substr(spos,epos-spos);//we found the borders of a value and cut it out
         //gelesenen Block entfernen
-        Message.erase(0, cute);
+        Message.erase(0, cute);// keep only what is behind this keyword and its values
 #ifdef __cout__
         cout<<"value for that key:\n"<<value<<"\n";
         cout<<"rest Message looop:\n"<<Message<<"\n";
 #endif // __cout__
     }//loop find right keyword
 
-    if(key.compare(keyword1) != 0)
+    if(key.compare(keyword1) != 0)//no found key match
         value = "nicht gefunden";
 
 #ifdef __cout__
@@ -771,7 +749,7 @@ unpackBrackets:
 
     return value;
 }
-char* WEB::To_CharArray(const std::string &Text)
+char* WEB::To_CharArray(const std::string &Text)// not used
 {
     int size = Text.size();
     char *a = new char[size + 1];
@@ -779,7 +757,7 @@ char* WEB::To_CharArray(const std::string &Text)
     memcpy(a, Text.c_str(), size);
     return a;
 }
-static size_t header_callback(char *received_data, size_t size,size_t nitems, void *response_header)
+static size_t header_callback(char *received_data, size_t size,size_t nitems, void *response_header)// callback for curl, taken from example
 {
     size_t realsize = size * nitems;
     //  try
@@ -789,7 +767,7 @@ static size_t header_callback(char *received_data, size_t size,size_t nitems, vo
     }
     return realsize;
 }
-size_t CurlWrite_CallbackFunc_StdString(void *contents, size_t size, size_t nmemb, std::string *s)
+size_t CurlWrite_CallbackFunc_StdString(void *contents, size_t size, size_t nmemb, std::string *s)// callback for curl, taken from example
 {
 //    size_t newLength = size * nmemb;
 //    size_t oldLength = s->size();
@@ -807,14 +785,14 @@ size_t CurlWrite_CallbackFunc_StdString(void *contents, size_t size, size_t nmem
     */    //  std::copy((char*)contents, (char*)contents + newLength, s->begin() + oldLength);
     return realsize;
 }
-char * string2Char (std::string Input)
+char * string2Char (std::string Input)// not used
 {
 
     char *Output = new char[Input.length() + 1];
     strcpy(Output, Input.c_str());
     return (Output);
 }
-std::string WEB::extract_url_parameter(std::string Input,std::string Key)
+std::string WEB::extract_url_parameter(std::string Input,std::string Key)// called from the login run
 {
     std::string temp_Input;
     Key= tolowerString(Key);
@@ -836,7 +814,7 @@ std::string WEB::extract_url_parameter(std::string Input,std::string Key)
     }
     return Input;
 }
-std::string WEB::get_HeaderElement(std::string Input,std::string Key)
+std::string WEB::get_HeaderElement(std::string Input,std::string Key)// called from the login run
 {
     std::string temp_Input;
     Key= tolowerString(Key);
@@ -855,7 +833,7 @@ std::string WEB::get_HeaderElement(std::string Input,std::string Key)
     Input=trim(Input);
     return Input;
 }
-std::string WEB::get_HTTPValue(std::string Input,std::string Key)
+std::string WEB::get_HTTPValue(std::string Input,std::string Key)// called from the login run
 {
     std::string temp_Input;
     Key= tolowerString(Key);
@@ -883,7 +861,7 @@ std::string WEB::get_HTTPValue(std::string Input,std::string Key)
         Input="";
     return Input;
 }
-std::string WEB::extract_csrf(std::string Input,std::string Key)
+std::string WEB::extract_csrf(std::string Input,std::string Key)// called from the login run
 {
     std::string temp_Key,temp_Input;
     temp_Key= tolowerString(Key);
@@ -907,7 +885,7 @@ std::string WEB::extract_csrf(std::string Input,std::string Key)
         Input="";
     return Input;
 }
-std::string WEB::get_logoutURL(std::string Input,std::string Key)
+std::string WEB::get_logoutURL(std::string Input,std::string Key)// called from the logout run
 {
     std::string temp_Key,temp_Input;
     temp_Key= tolowerString(Key);
@@ -932,7 +910,7 @@ std::string WEB::get_logoutURL(std::string Input,std::string Key)
         Input="";
     return Input;
 }
-int WEB::findBracket(std::string Input, std::string bracket)
+int WEB::findBracket(std::string Input, std::string bracket)//not used! find the position of the corosponding bracket
 {
     std::string check;
     int counter = 1; //found one {
@@ -959,14 +937,14 @@ int WEB::findBracket(std::string Input, std::string bracket)
     if (counter!=0) epos=0;
     return epos;
 }
-int WEB::findBracket(std::string Input, std::string bracket, int startpos)
+int WEB::findBracket(std::string Input, std::string bracket, int startpos)// same as above but working and begin at given startposition
 {
     std::string check;
     std::string left,right;
-    if (bracket.size()!=2)return -1;
+    if (bracket.size()!=2)return -1;// string bracket must be the pair of brackets you ar looking for like "{}" or "[]"
     left=bracket.at(0);
     right=bracket.at(1);
-    int counter = 1; //found one {
+    int counter = 1; //already found one {
     int epos = startpos;//end not befor start
     while(counter != 0 && epos < Input.length() )//find corosponding }
     {
@@ -981,12 +959,12 @@ int WEB::findBracket(std::string Input, std::string bracket, int startpos)
         }
         if (counter==0)
         {
-            break;// counter must be zero when found right }
+            break;// counter must be zero when found right bracket
         }
         epos++;
     }
 
-    if (counter!=0) epos=-1;
+    if (counter!=0) epos=-1;// it seems the Input was not complete
     return epos;
 }
 void WEB::set_requstheader (CURL *curl,curl_slist *chunk)
@@ -1142,7 +1120,7 @@ CURLcode WEB::perform_request(CURL *curl,std::string  URL,std::string sPostfield
 //    curl_easy_setopt(curl, CURLOPT_POST, 0);
     return res;
 }
-CURL_Response WEB::do_login(CURL *curl,CURL_Response response)
+CURL_Response WEB::do_login(CURL *curl,CURL_Response response)// got thru all 8 steps to login
 {
     portal_base_url = "https://www.portal.volkswagen-we.com";
     auth_base_url = "https://identity.vwgroup.io";
@@ -1179,7 +1157,7 @@ CURL_Response WEB::do_login(CURL *curl,CURL_Response response)
     {
         csrf=extract_csrf(s,"_csrf");
         int Test=ref2_url.find("/delegate/dashboard");
-        if (Test>0)
+        if (Test>0)// yes we are still logged in
         {
             cout<<"\nAbkürzung zu Step8\n";
             base_json_url=ref2_url;
@@ -1570,6 +1548,7 @@ StartAbfrage:
         s=removeNewLineCaracter(s);
         NewMessageResponse=s;
     }
+// the following request are possible but not really interisting
 //            site =(base_json_urlVIN+"/-/rah/get-status");
 //            site =(base_json_urlVIN+"/-/vhr/get-latest-report");
 //            site =(base_json_urlVIN+"/-/rsa/get-alerts");
@@ -1591,7 +1570,7 @@ void WEB::do_command(CURL *curl,std::string c_url,std::string command)
     curl_slist *chunk = NULL;
     set_actionheader(curl,chunk,csrf,base_json_url);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION,0);
-    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "POST");
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "POST");// this was really the trick! It don't work without
     client_id=trim(client_id);
     response.res=perform_request(curl,c_url,command);
     if(response.res != CURLE_OK)
@@ -1683,7 +1662,7 @@ CURL_Response WEB::init_response(CURL_Response response)
     response.Car.serviceInKm=-99;
     return response;
 }
-void WEB::unpack_emanager (std::string Message)
+void WEB::unpack_emanager (std::string Message)// parse json
 {
     std::string Gruppe,tempstring,subGruppe1,subGruppe2,subGruppe3;
     Gruppe=getValue(Message,"EManager");
@@ -1878,3 +1857,4 @@ void WEB::unpack_vehicleStatusData(std::string message)
     }
 
 }
+// thats it
