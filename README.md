@@ -1,7 +1,8 @@
 In fact, the files are named WEB.h and WEB.cpp. Also the class is named WEB.
 WEB is a class to connect to Volkswagen We-Connect.
-It ist based on the pythonscript "we_connect_client.py", written by Rene Boer, https://github.com/reneboer/python-carnet-client
-Author of WEB: Burkhard Venus
+It ist based on the pythonscript "we_connect_client.py", written by Rene Boer, 
+https://github.com/reneboer/python-carnet-client
+Autor of WEB: Burkhard Venus
 last Date: 10.02.2020
 It runs right now only on linux sytems. It must be CUL/libcurl installed. Tested with libcurl 7.38. and libcurl 7.58
 In the main app you must creat an object of WEB like: WEB CarNet;
@@ -37,10 +38,10 @@ example:(not really tested)
 #include WEB.h
 main
 {
-CUL_response car;//struct holden all data. The class WEB will use "extern CUL_response car;" to get access to it
-WEB CarNet;
-car.User="user@host.com";
-car.Passw="myPassword";
-car=CarNet.CARNET(); //car.CAR will now hold all data from your car.
-std:string errCode=CarNet.CARNET("start clima").errCode;// will start climate the car if the errCode is "0".
+  CUL_response car;//struct to hold all data. The class WEB will use "extern CUL_response car;" to get access to it
+  WEB CarNet;
+  car.User="user@host.com";
+  car.Passw="myPassword";
+  car=CarNet.CARNET(); //car.CAR will now hold all data from your car.
+  std:string errCode=CarNet.CARNET("start clima").errCode;// will start climate the car if the errCode is "0".
 }
