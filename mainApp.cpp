@@ -7,6 +7,10 @@ The code is not final, I am waiting for my ID.4 for further checkings and cleani
 #define maxFahrzeuge 8
 #include "mainApp.h"
 
+mainApp::mainApp()
+{
+        WeConnectValues = new sWeConnectValues[maxFahrzeuge];// allocate memory for pointer defined in mainApp.h. 
+}
 void mainApp::readCars()
 {
 #ifdef debug
@@ -24,7 +28,7 @@ void mainApp::readCars()
                 WeConnect.init(&WeConnectValues[i],&request_in_progress);
                 WeConnect.setUser(FahrzeugSettings[i].User,FahrzeugSettings[i].Passwort);
 //               printf("readCars call Fahrzeug %i: User: %s, Passwort: %s,VIN: %s\n",i,FahrzeugSettings[i].User.c_str(),FahrzeugSettings[i].Passwort.c_str(),FahrzeugSettings[i].VIN.c_str());
-                WeConnect.StartThread(i);// 
+                WeConnect.StartThread(i);// the collected Date will be stored in "WeConnectValues[i]" which is a pointer
             }
         }
         else if( WeConnectValues[i].thread_runing)// if the settings have changed and thread ist still running
