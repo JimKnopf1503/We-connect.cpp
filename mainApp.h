@@ -5,3 +5,5 @@
 
 cWeConnect WeConnect;
 void readCars();
+sWeConnectValues *WeConnectValues;
+    
